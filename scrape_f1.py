@@ -10,27 +10,54 @@ EXTRACT_JS = """
     document.querySelectorAll('table tbody tr, [role="row"], [class*="row"], [class*="Row"], [class*="item"], [class*="Item"], li')
   );
 
+  const ignoreWords = /^(game stats|driver|constructor|team|current cost|points per million|value for money|total fantasy points scored|average fantasy points scored|rank|pts|ppm|budget|price)$/i;
+
   const items = [];
   for (const el of candidates) {
     const txt = (el.innerText || '').trim();
     if (!txt || txt.length > 400 || !txt.includes('$')) continue;
 
-    const tokens = txt.split('\\n').map(s => s.trim()).filter(Boolean);
-    const costToken = tokens.find(t => /^\\$?\\d+(\\.\\d+)?\\s*M?$/i.test(t) && t.includes('$'));
-    const numTokens = tokens.filter(t => /^-?\\d+(\\.\\d+)?$/.test(t));
+    // 依換行或連續空白拆出所有文字片段
+    const rawTokens = txt
+      .split(/\\n+/)
+      .flatMap(line => line.split(/\\s{2,}/))
+      .map(s => s.trim())
+      .filter(Boolean);
 
-    const ignoreWords = /^(game stats|driver|constructor|team|current cost|points per million|value for money|total fantasy points scored|average fantasy points scored|rank|pts|ppm|budget|price)$/i;
-    const name = tokens.find(t =>
+    const costToken = rawTokens.find(t => /^\\$?\\d+(\\.\\d+)?\\s*M?$/i.test(t) && t.includes('$'));
+    const numTokens = rawTokens.filter(t => /^-?\\d+(\\.\\d+)?$/.test(t));
+    if (!costToken || numTokens.length === 0) continue;
+
+    // 過濾出候選姓名片段（排除價格、純數字與介面字眼）
+    const nameTokens = rawTokens.filter(t =>
       !t.includes('$') &&
       !/^-?\\d+(\\.\\d+)?$/.test(t) &&
       !ignoreWords.test(t) &&
       t.length >= 2 &&
-      t.length <= 40
+      t.length <= 35
     );
 
-    if (name && costToken && numTokens.length > 0) {
+    let fullName = null;
+    if (nameTokens.length >= 2) {
+      // 優先檢查是否有連續兩個單字組成「名 + 姓」（例如 "Kimi", "Antonelli" -> "Kimi Antonelli"）
+      for (let i = 0; i < nameTokens.length - 1; i++) {
+        const a = nameTokens[i];
+        const b = nameTokens[i + 1];
+        if (!a.includes(' ') && !b.includes(' ') && /^[A-Za-zÀ-ÿ.'-]+$/.test(a) && /^[A-Za-zÀ-ÿ.'-]+$/.test(b)) {
+          fullName = `${a} ${b}`;
+          break;
+        }
+      }
+      if (!fullName) {
+        fullName = nameTokens.find(p => p.includes(' ')) || nameTokens[0];
+      }
+    } else if (nameTokens.length === 1) {
+      fullName = nameTokens[0];
+    }
+
+    if (fullName) {
       items.push({
-        name,
+        name: fullName,
         current_cost: parseFloat(costToken.replace(/[^0-9.]/g, '')),
         points_per_million: parseFloat(numTokens[numTokens.length - 1])
       });
@@ -40,39 +67,15 @@ EXTRACT_JS = """
   const dedup = {};
   for (const it of items) {
     if (!isNaN(it.current_cost) && !isNaN(it.points_per_million)) {
-      dedup[it.name] = it;
+      // 若同一個名字出現多次，保留較完整的名稱（字數較長者）
+      if (!dedup[it.name] || it.name.length > dedup[it.name].name.length) {
+        dedup[it.name] = it;
+      }
     }
   }
   return Object.values(dedup);
 }
 """
-
-def debug_vfm_elements(page, label):
-    info = page.evaluate("""
-      () => {
-        const all = Array.from(document.querySelectorAll('*'));
-        const matches = all.filter(el => {
-          const t = (el.innerText || '').trim();
-          return (t === 'Value For Money' || t === 'Total Fantasy Points Scored') && el.children.length <= 2;
-        });
-        return matches.map(el => {
-          const rect = el.getBoundingClientRect();
-          const style = window.getComputedStyle(el);
-          return {
-            text: (el.innerText || '').trim(),
-            tag: el.tagName,
-            cls: el.className,
-            parentTag: el.parentElement ? el.parentElement.tagName : null,
-            parentCls: el.parentElement ? el.parentElement.className : null,
-            display: style.display,
-            visibility: style.visibility,
-            w: Math.round(rect.width),
-            h: Math.round(rect.height)
-          };
-        });
-      }
-    """)
-    print(f"[{label}][VFM_DEBUG] {info}")
 
 def switch_to_vfm(page, label):
     for btn_text in ["Accept All", "Accept", "Agree", "Reject All"]:
@@ -85,37 +88,44 @@ def switch_to_vfm(page, label):
         except Exception:
             pass
 
-    debug_vfm_elements(page, label)
+    clicked = False
+    li_locator = page.locator("li").filter(has_text="Value For Money")
+    for i in range(li_locator.count()):
+        item = li_locator.nth(i)
+        try:
+            if item.is_visible():
+                item.scroll_into_view_if_needed()
+                item.click(timeout=5000)
+                clicked = True
+                break
+        except Exception:
+            continue
 
-    # 嘗試直接用 JS 觸發 Value For Money 相關元素的 click / mousedown / pointerdown
-    res = page.evaluate("""
-      () => {
-        const els = Array.from(document.querySelectorAll('*')).filter(el => {
-          const t = (el.innerText || '').trim();
-          return t === 'Value For Money' && el.children.length <= 2;
-        });
-        let count = 0;
-        for (const el of els) {
-          for (const target of [el, el.parentElement, el.parentElement?.parentElement]) {
-            if (!target) continue;
-            ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(ev => {
-              target.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true, view: window }));
-            });
-            if (typeof target.click === 'function') target.click();
-            count++;
+    if not clicked:
+        page.evaluate("""
+          () => {
+            const lis = Array.from(document.querySelectorAll('li')).filter(
+              li => (li.innerText || '').trim().toLowerCase().includes('value for money')
+            );
+            for (const li of lis) {
+              const rect = li.getBoundingClientRect();
+              if (rect.width > 0 && rect.height > 0) {
+                li.click();
+                const span = li.querySelector('span');
+                if (span) span.click();
+                return true;
+              }
+            }
+            return false;
           }
-        }
-        return { matched: els.length, dispatched: count };
-      }
-    """)
-    page.wait_for_timeout(2500)
-    after_sample = page.evaluate(EXTRACT_JS)[:2]
-    print(f"[{label}][JS_DISPATCH={res}][AFTER] {after_sample}")
+        """)
 
-def scrape_tab(page, label, url):
+    page.wait_for_timeout(3000)
+
+def scrape_tab(page, url):
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(5000)
-    switch_to_vfm(page, label)
+    switch_to_vfm(page, url)
     return page.evaluate(EXTRACT_JS)
 
 def main():
@@ -127,8 +137,8 @@ def main():
         )
         page = context.new_page()
 
-        drivers = scrape_tab(page, "DRIVERS", DRIVER_URL)
-        constructors = scrape_tab(page, "CONSTRUCTORS", CONSTRUCTOR_URL)
+        drivers = scrape_tab(page, DRIVER_URL)
+        constructors = scrape_tab(page, CONSTRUCTOR_URL)
         browser.close()
 
     output = {
