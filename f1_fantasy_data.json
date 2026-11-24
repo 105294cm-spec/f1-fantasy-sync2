@@ -58,127 +58,127 @@
   ],
   "drivers": [
     {
-      "name": "Kimi",
+      "name": "Kimi ANTONELLI",
       "current_cost": 27.7,
       "points_per_million": 1.4
     },
     {
-      "name": "Max",
+      "name": "Max VERSTAPPEN",
       "current_cost": 29.4,
       "points_per_million": 1.11
     },
     {
-      "name": "Lewis",
+      "name": "Lewis HAMILTON",
       "current_cost": 25.4,
       "points_per_million": 1.09
     },
     {
-      "name": "Charles",
+      "name": "Charles LECLERC",
       "current_cost": 24.9,
       "points_per_million": 1.03
     },
     {
-      "name": "Pierre",
+      "name": "Pierre GASLY",
       "current_cost": 9,
       "points_per_million": 0.91
     },
     {
-      "name": "Oliver",
+      "name": "Oliver BEARMAN",
       "current_cost": 4.4,
       "points_per_million": 0.9
     },
     {
-      "name": "George",
+      "name": "George RUSSELL",
       "current_cost": 27.1,
       "points_per_million": 0.88
     },
     {
-      "name": "Lando",
+      "name": "Lando NORRIS",
       "current_cost": 26.3,
       "points_per_million": 0.87
     },
     {
-      "name": "Carlos",
+      "name": "Carlos SAINZ",
       "current_cost": 8.4,
       "points_per_million": 0.86
     },
     {
-      "name": "Liam",
-      "current_cost": 15.1,
-      "points_per_million": 0.17
+      "name": "Liam LAWSON",
+      "current_cost": 12.3,
+      "points_per_million": 0.86
     },
     {
-      "name": "Franco",
+      "name": "Franco COLAPINTO",
       "current_cost": 7.6,
       "points_per_million": 0.85
     },
     {
-      "name": "Gabriel",
+      "name": "Gabriel BORTOLETO",
       "current_cost": 7,
       "points_per_million": 0.8
     },
     {
-      "name": "Esteban",
+      "name": "Esteban OCON",
       "current_cost": 10.1,
       "points_per_million": 0.79
     },
     {
-      "name": "Arvid",
+      "name": "Arvid LINDBLAD",
       "current_cost": 8.8,
       "points_per_million": 0.76
     },
     {
-      "name": "Isack",
+      "name": "Isack HADJAR",
       "current_cost": 16.7,
       "points_per_million": 0.76
     },
     {
-      "name": "Oscar",
+      "name": "Oscar PIASTRI",
       "current_cost": 22.8,
       "points_per_million": 0.75
     },
     {
-      "name": "Nico",
+      "name": "Nico HULKENBERG",
       "current_cost": 7,
       "points_per_million": 0.44
     },
     {
-      "name": "Fernando",
+      "name": "Fernando ALONSO",
       "current_cost": 4.2,
       "points_per_million": 0.41
     },
     {
-      "name": "Sergio",
+      "name": "Sergio PEREZ",
       "current_cost": 3,
       "points_per_million": 0.4
     },
     {
-      "name": "Ryo",
+      "name": "Ryo HIRAKAWA",
       "current_cost": 6.6,
       "points_per_million": 0.12
     },
     {
-      "name": "Yuki",
+      "name": "Yuki TSUNODA",
       "current_cost": 9.7,
       "points_per_million": 0.11
     },
     {
-      "name": "Rafael",
+      "name": "Rafael CÂMARA",
       "current_cost": 4.8,
       "points_per_million": -0.03
     },
     {
-      "name": "Alexander",
+      "name": "Alexander ALBON",
       "current_cost": 3.8,
       "points_per_million": -0.14
     },
     {
-      "name": "Valtteri",
+      "name": "Valtteri BOTTAS",
       "current_cost": 3,
       "points_per_million": -2.16
     },
     {
-      "name": "Lance",
+      "name": "Lance STROLL",
       "current_cost": 3,
       "points_per_million": -2.57
     }
