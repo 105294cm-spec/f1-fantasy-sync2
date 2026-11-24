@@ -47,47 +47,41 @@ EXTRACT_JS = """
 }
 """
 
-def switch_to_value_for_money(page, label):
-    # 1. 若有 Cookie 同意彈窗先嘗試關閉，避免遮擋點擊
-    for btn_text in ["Accept All", "Accept", "Agree", "Reject All"]:
-        try:
-            btn = page.get_by_role("button", name=btn_text, exact=False)
-            if btn.count() > 0 and btn.first.is_visible():
-                btn.first.click()
-                page.wait_for_timeout(800)
-                break
-        except Exception:
-            pass
+def debug_and_switch(page, label):
+    # 印出頁面上所有 <select> 選項與包含 Value / Points / Filter 的文字
+    debug_info = page.evaluate("""
+      () => {
+        const selects = Array.from(document.querySelectorAll('select')).map(s => ({
+          id: s.id,
+          name: s.name,
+          options: Array.from(s.options).map(o => ({ value: o.value, text: o.text.trim() }))
+        }));
+        const matchedTexts = Array.from(document.querySelectorAll('button, a, [role="option"], [role="tab"], label, div, span'))
+          .map(el => (el.innerText || '').trim())
+          .filter(t => t.length > 0 && t.length < 60 && /value|points|money|filter|ppm/i.test(t));
+        return { selects, matchedTexts: [...new Set(matchedTexts)].slice(0, 30) };
+      }
+    """)
+    print(f"[{label}][DEBUG] selects:", debug_info["selects"])
+    print(f"[{label}][DEBUG] matchedTexts:", debug_info["matchedTexts"])
 
-    # 2. 情況 A：Value for Money 是下拉選單選項，需先點開目前的 "Total Fantasy Points Scored"
-    try:
-        dropdown = page.get_by_text("Total Fantasy Points Scored", exact=False)
-        if dropdown.count() > 0:
-            dropdown.first.click()
-            page.wait_for_timeout(1000)
-    except Exception:
-        pass
-
-    # 3. 點擊 "Value for Money"（包含隱藏在展開選單或滾動區內的選項）
-    clicked = False
-    try:
-        vfm = page.get_by_text("Value for Money", exact=False)
-        if vfm.count() > 0:
-            vfm.first.scroll_into_view_if_needed()
-            vfm.first.click(force=True)
-            clicked = True
-            page.wait_for_timeout(2500)
-    except Exception as e:
-        print(f"[{label}] Click Value for Money error:", e)
-
-    # 4. 驗證目前頁面是否已出現 "Points Per Million" 欄位標題
-    has_ppm = page.evaluate("() => document.body.innerText.includes('Points Per Million')")
-    print(f"[{label}] Clicked VFM={clicked}, Page has 'Points Per Million'={has_ppm}")
+    # 若有 <select> 選項包含 value / money / ppm，直接用 select_option 切換
+    for s in debug_info["selects"]:
+        for opt in s["options"]:
+            if "value" in opt["text"].lower() or "money" in opt["text"].lower() or "ppm" in opt["value"].lower():
+                try:
+                    selector = f"#{s['id']}" if s["id"] else "select"
+                    page.select_option(selector, value=opt["value"])
+                    page.wait_for_timeout(2000)
+                    print(f"[{label}][DEBUG] Selected option:", opt)
+                    return
+                except Exception as e:
+                    print(f"[{label}][DEBUG] select_option error:", e)
 
 def scrape_tab(page, label, url):
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
-    page.wait_for_timeout(4500)
-    switch_to_value_for_money(page, label)
+    page.wait_for_timeout(5000)
+    debug_and_switch(page, label)
     data = page.evaluate(EXTRACT_JS)
     print(f"[{label}] Sample extracted:", data[:3])
     return data
