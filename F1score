@@ -1,0 +1,665 @@
+HTML
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>F1 Fantasy 排陣器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #0f172a; color: #f8fafc; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- 精簡頂部列 -->
+  <header class="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 py-2.5">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <span class="bg-red-600 text-white font-black px-2 py-0.5 rounded text-xs">F1 FANTASY</span>
+        <span class="font-bold text-sm md:text-base">排陣器</span>
+        <span id="lastSyncBadge" class="hidden text-[11px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded"></span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <label for="budgetInput" class="text-xs text-slate-400">預算 ($M):</label>
+        <input id="budgetInput" type="number" step="0.1" value="133.7"
+          class="w-20 bg-slate-800 text-amber-400 font-bold text-right text-xs px-2 py-1 rounded border border-slate-700 focus:outline-none focus:border-amber-400" />
+        <button onclick="openDataModal('json')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">
+          ⚙️ 更新數據 / JSON 同步
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 左右雙視窗主畫面 -->
+  <main class="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- 左側視窗：目前陣容 -->
+    <section class="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold text-white">目前陣容</h2>
+        <div class="flex gap-1.5">
+          <button onclick="loadPresetRoster()" class="text-[11px] bg-slate-800 hover:bg-slate-700 text-amber-300 px-2 py-1 rounded">預設陣容</button>
+          <button onclick="clearRoster()" class="text-[11px] bg-slate-800 hover:bg-rose-700 text-slate-300 px-2 py-1 rounded">清空</button>
+        </div>
+      </div>
+
+      <!-- 陣容數據摘要 -->
+      <div class="grid grid-cols-4 gap-2 text-center bg-slate-950/80 border border-slate-800 rounded-lg p-2.5">
+        <div>
+          <div class="text-[10px] text-slate-400">編制</div>
+          <div id="statCount" class="text-xs font-bold text-white mt-0.5">0/2 · 0/5</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-400">花費</div>
+          <div id="statCost" class="text-xs font-bold text-sky-400 mt-0.5">$0.0M</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-400">剩餘</div>
+          <div id="statRemaining" class="text-xs font-bold text-emerald-400 mt-0.5">$133.7M</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-400">積分 (PPM)</div>
+          <div id="statPoints" class="text-xs font-black text-amber-400 mt-0.5">0.00</div>
+        </div>
+      </div>
+
+      <div id="budgetWarning" class="hidden text-[11px] text-rose-400 bg-rose-950/50 border border-rose-500/40 rounded-lg px-3 py-1.5">
+        剩餘預算為負值：目前無法新增選手，請先移除或替換現有選手。
+      </div>
+
+      <!-- 已選車隊 (2) -->
+      <div>
+        <div class="text-xs font-semibold text-indigo-300 mb-1.5">車隊 (2)</div>
+        <div id="selectedConstructorsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+      </div>
+
+      <!-- 已選車手 (5) -->
+      <div>
+        <div class="text-xs font-semibold text-sky-300 mb-1.5">車手 (5)</div>
+        <div id="selectedDriversGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+      </div>
+
+      <!-- 最佳化建議 -->
+      <div class="pt-2 border-t border-slate-800 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <select id="maxSwapsSelect" class="bg-slate-950 border border-slate-700 text-xs text-slate-200 rounded px-2 py-1">
+            <option value="unlimited">全局最高分</option>
+            <option value="1">最多換 1 項</option>
+            <option value="2">最多換 2 項</option>
+            <option value="3" selected>最多換 3 項</option>
+          </select>
+          <button onclick="runOptimizer()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">
+            計算最佳陣容
+          </button>
+        </div>
+        <div id="optimizerResults" class="space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- 右側視窗：選手與車隊列表（依價格降冪） -->
+    <section class="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col">
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <h2 class="text-sm font-bold text-white">選手與車隊列表（價格高 → 低）</h2>
+        <input id="searchInput" type="text" oninput="renderPool()" placeholder="搜尋名稱..."
+          class="w-44 sm:w-56 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500" />
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1">
+        <!-- 車隊清單 -->
+        <div class="bg-slate-950/70 border border-slate-800 rounded-lg p-2.5 flex flex-col max-h-[76vh]">
+          <div class="text-xs font-bold text-indigo-300 pb-1.5 mb-2 border-b border-slate-800 flex justify-between">
+            <span>車隊</span>
+            <span id="constructorCountBadge" class="text-slate-400 font-normal">0</span>
+          </div>
+          <div id="constructorPoolList" class="overflow-y-auto space-y-1.5 pr-1 flex-1"></div>
+        </div>
+
+        <!-- 車手清單 -->
+        <div class="bg-slate-950/70 border border-slate-800 rounded-lg p-2.5 flex flex-col max-h-[76vh]">
+          <div class="text-xs font-bold text-sky-300 pb-1.5 mb-2 border-b border-slate-800 flex justify-between">
+            <span>車手</span>
+            <span id="driverCountBadge" class="text-slate-400 font-normal">0</span>
+          </div>
+          <div id="driverPoolList" class="overflow-y-auto space-y-1.5 pr-1 flex-1"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 資料同步與匯入 Modal -->
+  <div id="dataModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[88vh] flex flex-col">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+        <h3 class="text-sm font-bold text-white">更新數據 / JSON 同步</h3>
+        <button onclick="closeDataModal()" class="text-slate-400 hover:text-white text-lg px-2">✕</button>
+      </div>
+
+      <div class="flex border-b border-slate-800 px-4 bg-slate-950/50 text-xs">
+        <button id="mTabJson" onclick="switchModalTab('json')" class="py-2 px-3 font-bold border-b-2 border-indigo-500 text-indigo-400">JSON 同步</button>
+        <button id="mTabPaste" onclick="switchModalTab('paste')" class="py-2 px-3 font-bold border-b-2 border-transparent text-slate-400 hover:text-white">貼上匯入</button>
+        <button id="mTabTable" onclick="switchModalTab('table')" class="py-2 px-3 font-bold border-b-2 border-transparent text-slate-400 hover:text-white">手動微調</button>
+      </div>
+
+      <div class="p-4 overflow-y-auto flex-1 space-y-4 text-xs">
+        <div id="modalPanelJson" class="space-y-3">
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="jsonUrlInput" type="url" placeholder="https://raw.githubusercontent.com/.../f1_fantasy_data.json"
+              class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500" />
+            <button onclick="fetchRemoteJson(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg whitespace-nowrap">
+              立即同步 JSON
+            </button>
+          </div>
+          <label class="flex items-center gap-2 text-slate-300 cursor-pointer">
+            <input id="autoSyncCheckbox" type="checkbox" onchange="saveSyncSettings()" class="rounded bg-slate-900 border-slate-600" />
+            <span>開啟網頁時自動同步 JSON</span>
+          </label>
+          <div class="pt-2 border-t border-slate-800 space-y-2">
+            <div class="text-slate-400">或匯入本機 .json 檔：</div>
+            <input type="file" accept=".json,application/json" onchange="handleLocalJsonFile(event)" class="text-slate-300" />
+          </div>
+          <div id="jsonStatusMsg" class="text-slate-300"></div>
+        </div>
+
+        <div id="modalPanelPaste" class="hidden space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-slate-300 mb-1">車隊資料</label>
+              <textarea id="pasteConstructorBox" rows="5" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 font-mono"></textarea>
+            </div>
+            <div>
+              <label class="block text-slate-300 mb-1">車手資料</label>
+              <textarea id="pasteDriverBox" rows="5" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 font-mono"></textarea>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="previewParsedPaste()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg">預覽解析</button>
+            <button id="applyPasteBtn" onclick="applyParsedPaste()" disabled class="bg-emerald-600 disabled:opacity-40 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg">套用更新</button>
+          </div>
+          <div id="pastePreviewArea" class="hidden bg-slate-950 border border-slate-800 rounded-lg p-2.5 max-h-44 overflow-y-auto"></div>
+        </div>
+
+        <div id="modalPanelTable" class="hidden space-y-3">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">修改價格與積分後儲存</span>
+            <button onclick="resetToDefaultData()" class="text-rose-400 hover:underline">恢復預設數據</button>
+          </div>
+          <div id="manualEditGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-80 overflow-y-auto"></div>
+          <button onclick="saveManualTable()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-1.5 rounded-lg">儲存變更</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const DEFAULT_DATA = {
+  constructors: [
+    { id: 'c_mercedes', name: 'Mercedes', price: 34.0, points: 2.29 },
+    { id: 'c_ferrari', name: 'Ferrari', price: 29.4, points: 2.21 },
+    { id: 'c_mclaren', name: 'McLaren', price: 28.9, points: 1.49 },
+    { id: 'c_redbull', name: 'Red Bull Racing', price: 28.2, points: 1.56 },
+    { id: 'c_haas', name: 'Haas', price: 9.8, points: 1.47 },
+    { id: 'c_alpine', name: 'Alpine', price: 11.4, points: 1.38 },
+    { id: 'c_rb', name: 'Racing Bulls', price: 12.1, points: 1.25 },
+    { id: 'c_audi', name: 'Audi', price: 7.4, points: 1.15 },
+    { id: 'c_williams', name: 'Williams', price: 12.9, points: 1.12 },
+    { id: 'c_aston', name: 'Aston Martin', price: 8.6, points: 0.65 },
+    { id: 'c_cadillac', name: 'Cadillac', price: 4.5, points: 0.55 }
+  ],
+  drivers: [
+    { id: 'd_antonelli', name: 'Kimi Antonelli', price: 27.7, points: 1.40 },
+    { id: 'd_verstappen', name: 'Max Verstappen', price: 29.4, points: 1.11 },
+    { id: 'd_hamilton', name: 'Lewis Hamilton', price: 25.4, points: 1.09 },
+    { id: 'd_leclerc', name: 'Charles Leclerc', price: 24.9, points: 1.03 },
+    { id: 'd_gasly', name: 'Pierre Gasly', price: 9.0, points: 0.91 },
+    { id: 'd_bearman', name: 'Oliver Bearman', price: 4.4, points: 0.90 },
+    { id: 'd_russell', name: 'George Russell', price: 27.1, points: 0.88 },
+    { id: 'd_norris', name: 'Lando Norris', price: 26.3, points: 0.87 },
+    { id: 'd_sainz', name: 'Carlos Sainz', price: 8.4, points: 0.86 },
+    { id: 'd_lawson', name: 'Liam Lawson', price: 12.3, points: 0.86 },
+    { id: 'd_colapinto', name: 'Franco Colapinto', price: 7.6, points: 0.85 },
+    { id: 'd_bortoleto', name: 'Gabriel Bortoleto', price: 7.0, points: 0.80 },
+    { id: 'd_hadjar', name: 'Isack Hadjar', price: 16.7, points: 0.76 },
+    { id: 'd_piastri', name: 'Oscar Piastri', price: 22.8, points: 0.75 },
+    { id: 'd_hulkenberg', name: 'Nico Hulkenberg', price: 6.8, points: 0.72 },
+    { id: 'd_ocon', name: 'Esteban Ocon', price: 7.2, points: 0.70 },
+    { id: 'd_albon', name: 'Alexander Albon', price: 11.2, points: 0.68 },
+    { id: 'd_lindblad', name: 'Arvid Lindblad', price: 5.5, points: 0.62 },
+    { id: 'd_alonso', name: 'Fernando Alonso', price: 4.2, points: 0.41 },
+    { id: 'd_perez', name: 'Sergio Perez', price: 3.0, points: 0.40 },
+    { id: 'd_stroll', name: 'Lance Stroll', price: 3.8, points: 0.35 },
+    { id: 'd_bottas', name: 'Valtteri Bottas', price: 3.0, points: -0.70 }
+  ]
+};
+
+function findMatchingItem(list, incomingName) {
+  const norm = (incomingName || '').trim().toLowerCase();
+  if (!norm) return null;
+  const exact = list.find(item => item.name.toLowerCase() === norm);
+  if (exact) return exact;
+  const tokenMatches = list.filter(item => item.name.toLowerCase().split(/\s+/).includes(norm));
+  if (tokenMatches.length === 1) return tokenMatches[0];
+  const subMatches = list.filter(item => item.name.toLowerCase().includes(norm) || norm.includes(item.name.toLowerCase()));
+  if (subMatches.length === 1) return subMatches[0];
+  return null;
+}
+
+function loadCleanDb() {
+  const saved = JSON.parse(localStorage.getItem('f1_fantasy_db_v3'));
+  if (!saved) return JSON.parse(JSON.stringify(DEFAULT_DATA));
+  const mergeBase = (arr, defArr) => {
+    const base = JSON.parse(JSON.stringify(defArr));
+    (arr || []).forEach(item => {
+      const m = findMatchingItem(base, item.name);
+      if (m) { m.price = item.price; m.points = item.points; }
+      else base.push(item);
+    });
+    return base;
+  };
+  return {
+    constructors: mergeBase(saved.constructors, DEFAULT_DATA.constructors),
+    drivers: mergeBase(saved.drivers, DEFAULT_DATA.drivers)
+  };
+}
+
+let db = loadCleanDb();
+let selectedConstructors = [];
+let selectedDrivers = [];
+let lockedIds = new Set();
+let pendingParsedData = null;
+
+function saveDb(label = '已儲存') {
+  localStorage.setItem('f1_fantasy_db_v3', JSON.stringify(db));
+  const badge = document.getElementById('lastSyncBadge');
+  badge.textContent = `${label} · ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`;
+  badge.classList.remove('hidden');
+}
+
+function getBudget() { return parseFloat(document.getElementById('budgetInput').value) || 0; }
+document.getElementById('budgetInput').addEventListener('input', updateUI);
+function findItemById(id) { return db.constructors.find(c => c.id === id) || db.drivers.find(d => d.id === id); }
+
+function getCurrentCost() {
+  return [...selectedConstructors, ...selectedDrivers]
+    .map(findItemById)
+    .filter(Boolean)
+    .reduce((s, x) => s + x.price, 0);
+}
+
+function canAddItem(item) {
+  if (!item) return false;
+  const remaining = getBudget() - getCurrentCost();
+  if (remaining < -0.001) return false;
+  return item.price <= remaining + 0.001;
+}
+
+function toggleSelect(type, id) {
+  if (type === 'constructor') {
+    const idx = selectedConstructors.indexOf(id);
+    if (idx > -1) {
+      selectedConstructors.splice(idx, 1);
+      lockedIds.delete(id);
+    } else if (selectedConstructors.length < 2) {
+      const item = findItemById(id);
+      if (!canAddItem(item)) return;
+      selectedConstructors.push(id);
+    }
+  } else {
+    const idx = selectedDrivers.indexOf(id);
+    if (idx > -1) {
+      selectedDrivers.splice(idx, 1);
+      lockedIds.delete(id);
+    } else if (selectedDrivers.length < 5) {
+      const item = findItemById(id);
+      if (!canAddItem(item)) return;
+      selectedDrivers.push(id);
+    }
+  }
+  updateUI();
+}
+
+function toggleLock(id) {
+  if (lockedIds.has(id)) lockedIds.delete(id);
+  else lockedIds.add(id);
+  updateUI();
+}
+
+function loadPresetRoster() {
+  selectedConstructors = ['c_mercedes', 'c_ferrari'].filter(id => findItemById(id));
+  selectedDrivers = ['d_antonelli', 'd_bortoleto', 'd_russell', 'd_perez', 'd_alonso'].filter(id => findItemById(id));
+  lockedIds.clear();
+  updateUI();
+}
+
+function clearRoster() {
+  selectedConstructors = [];
+  selectedDrivers = [];
+  lockedIds.clear();
+  updateUI();
+}
+
+function updateUI() {
+  const budget = getBudget();
+  const cItems = selectedConstructors.map(findItemById).filter(Boolean);
+  const dItems = selectedDrivers.map(findItemById).filter(Boolean);
+  const all = [...cItems, ...dItems];
+  const totalCost = all.reduce((s, x) => s + x.price, 0);
+  const totalPoints = all.reduce((s, x) => s + x.points, 0);
+  const rem = budget - totalCost;
+  const isNegativeBudget = rem < -0.001;
+
+  document.getElementById('statCount').textContent = `${cItems.length}/2 · ${dItems.length}/5`;
+  document.getElementById('statCost').textContent = `$${totalCost.toFixed(1)}M`;
+  const remEl = document.getElementById('statRemaining');
+  remEl.textContent = `${rem < 0 ? '-' : ''}$${Math.abs(rem).toFixed(1)}M`;
+  remEl.className = `text-xs font-bold mt-0.5 ${isNegativeBudget ? 'text-rose-400' : 'text-emerald-400'}`;
+  document.getElementById('statPoints').textContent = totalPoints.toFixed(2);
+  document.getElementById('budgetWarning').classList.toggle('hidden', !isNegativeBudget);
+
+  renderSlots('selectedConstructorsGrid', cItems, 2, 'constructor');
+  renderSlots('selectedDriversGrid', dItems, 5, 'driver');
+  renderPool();
+}
+
+function renderSlots(containerId, items, maxCount, type) {
+  const el = document.getElementById(containerId);
+  let html = '';
+  for (let i = 0; i < maxCount; i++) {
+    const item = items[i];
+    if (item) {
+      const locked = lockedIds.has(item.id);
+      html += `
+        <div class="bg-slate-950 border ${locked ? 'border-amber-400/70' : 'border-slate-800'} rounded-lg p-2 flex items-center justify-between gap-1.5">
+          <div class="min-w-0">
+            <div class="text-xs font-bold text-white truncate">${item.name}</div>
+            <div class="text-[11px] text-slate-400">$${item.price.toFixed(1)}M · <span class="text-amber-400">${item.points.toFixed(2)}</span></div>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <button onclick="toggleLock('${item.id}')" class="text-xs px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700">${locked ? '🔒' : '🔓'}</button>
+            <button onclick="toggleSelect('${type}', '${item.id}')" class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-rose-700 text-slate-300">✕</button>
+          </div>
+        </div>`;
+    } else {
+      html += `<div class="border border-dashed border-slate-800 rounded-lg p-2.5 text-center text-[11px] text-slate-600">空位</div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+function renderList(containerId, items, type, slotsFull, remaining) {
+  const el = document.getElementById(containerId);
+  const budgetNegative = remaining < -0.001;
+  el.innerHTML = items.map(item => {
+    const isSel = type === 'constructor' ? selectedConstructors.includes(item.id) : selectedDrivers.includes(item.id);
+    const overBudget = !isSel && (budgetNegative || item.price > remaining + 0.001);
+    const disabled = !isSel && (slotsFull || overBudget);
+    const btnLabel = isSel ? '已選' : overBudget ? '超預算' : '加入';
+
+    return `
+      <div class="flex items-center justify-between bg-slate-900 border ${isSel ? 'border-emerald-500/60 bg-emerald-950/20' : overBudget ? 'border-slate-800/60 opacity-55' : 'border-slate-800/90'} rounded-lg px-2.5 py-1.5 text-xs">
+        <div class="min-w-0 pr-2">
+          <div class="font-semibold text-white truncate">${item.name}</div>
+          <div class="text-[11px] text-slate-400"><span class="text-sky-400 font-bold">$${item.price.toFixed(1)}M</span> · <span class="text-amber-400">${item.points.toFixed(2)} 分</span></div>
+        </div>
+        <button onclick="toggleSelect('${type}', '${item.id}')" ${disabled ? 'disabled' : ''}
+          class="px-2 py-0.5 rounded text-[11px] font-bold shrink-0 ${
+            isSel ? 'bg-emerald-600 text-white hover:bg-rose-700' : disabled ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-slate-800 hover:bg-indigo-600 text-slate-200'
+          }">${btnLabel}</button>
+      </div>`;
+  }).join('');
+}
+
+function renderPool() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const remaining = getBudget() - getCurrentCost();
+  const byPriceDesc = (a, b) => (b.price - a.price) || (b.points - a.points);
+  const cs = db.constructors.filter(x => !q || x.name.toLowerCase().includes(q)).sort(byPriceDesc);
+  const ds = db.drivers.filter(x => !q || x.name.toLowerCase().includes(q)).sort(byPriceDesc);
+
+  document.getElementById('constructorCountBadge').textContent = `${cs.length}`;
+  document.getElementById('driverCountBadge').textContent = `${ds.length}`;
+  renderList('constructorPoolList', cs, 'constructor', selectedConstructors.length >= 2, remaining);
+  renderList('driverPoolList', ds, 'driver', selectedDrivers.length >= 5, remaining);
+}
+
+function runOptimizer() {
+  const budget = getBudget();
+  const maxSwapsVal = document.getElementById('maxSwapsSelect').value;
+  const maxSwaps = maxSwapsVal === 'unlimited' ? 99 : parseInt(maxSwapsVal, 10);
+  const lockedC = selectedConstructors.filter(id => lockedIds.has(id));
+  const lockedD = selectedDrivers.filter(id => lockedIds.has(id));
+  const currentSet = new Set([...selectedConstructors, ...selectedDrivers]);
+  const hasFullBase = selectedConstructors.length === 2 && selectedDrivers.length === 5;
+
+  const cCombos = [];
+  for (let i = 0; i < db.constructors.length; i++) {
+    for (let j = i + 1; j < db.constructors.length; j++) {
+      const pair = [db.constructors[i], db.constructors[j]];
+      if (lockedC.every(lid => pair.some(x => x.id === lid))) cCombos.push(pair);
+    }
+  }
+
+  const dCombos = [];
+  const ds = db.drivers;
+  for (let a = 0; a < ds.length - 4; a++)
+    for (let b = a + 1; b < ds.length - 3; b++)
+      for (let c = b + 1; c < ds.length - 2; c++)
+        for (let d = c + 1; d < ds.length - 1; d++)
+          for (let e = d + 1; e < ds.length; e++) {
+            const five = [ds[a], ds[b], ds[c], ds[d], ds[e]];
+            if (lockedD.every(lid => five.some(x => x.id === lid))) dCombos.push(five);
+          }
+
+  const top = [];
+  for (const cc of cCombos) {
+    const cCost = cc[0].price + cc[1].price;
+    if (cCost > budget + 0.001) continue;
+    const cPts = cc[0].points + cc[1].points;
+    for (const dc of dCombos) {
+      const cost = cCost + dc[0].price + dc[1].price + dc[2].price + dc[3].price + dc[4].price;
+      if (cost > budget + 0.001) continue;
+      if (maxSwaps < 99 && hasFullBase) {
+        const candIds = [...cc.map(x => x.id), ...dc.map(x => x.id)];
+        if (7 - candIds.filter(id => currentSet.has(id)).length > maxSwaps) continue;
+      }
+      const pts = cPts + dc[0].points + dc[1].points + dc[2].points + dc[3].points + dc[4].points;
+      if (top.length < 2 || pts > top[top.length - 1].pts) {
+        top.push({ cc, dc, cost, pts });
+        top.sort((x, y) => y.pts - x.pts);
+        if (top.length > 2) top.pop();
+      }
+    }
+  }
+
+  const box = document.getElementById('optimizerResults');
+  if (!top.length) {
+    box.innerHTML = `<div class="text-xs text-rose-400 bg-rose-950/40 rounded p-2.5">預算或鎖定條件下無可行組合</div>`;
+    return;
+  }
+  box.innerHTML = top.map((r, i) => {
+    const cJson = JSON.stringify(r.cc.map(x => x.id)).replace(/"/g, '&quot;');
+    const dJson = JSON.stringify(r.dc.map(x => x.id)).replace(/"/g, '&quot;');
+    return `
+      <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs space-y-1">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-amber-400">#${i + 1} · ${r.pts.toFixed(2)} 分 ($${r.cost.toFixed(1)}M)</span>
+          <button onclick="applyCombo(${cJson}, ${dJson})" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded text-[11px] font-bold">套用</button>
+        </div>
+        <div class="text-slate-300 text-[11px]">車隊：${r.cc.map(x => x.name).join('、')}</div>
+        <div class="text-slate-400 text-[11px]">車手：${r.dc.map(x => x.name).join('、')}</div>
+      </div>`;
+  }).join('');
+}
+
+function applyCombo(cIds, dIds) { selectedConstructors = cIds; selectedDrivers = dIds; updateUI(); }
+
+function openDataModal(tab = 'json') {
+  document.getElementById('dataModal').classList.remove('hidden');
+  document.getElementById('jsonUrlInput').value = localStorage.getItem('f1_json_url') || '';
+  document.getElementById('autoSyncCheckbox').checked = localStorage.getItem('f1_json_autosync') === 'true';
+  switchModalTab(tab);
+  renderManualTable();
+}
+
+function closeDataModal() { document.getElementById('dataModal').classList.add('hidden'); }
+
+function switchModalTab(tab) {
+  ['json', 'paste', 'table'].forEach(t => {
+    document.getElementById('modalPanel' + t[0].toUpperCase() + t.slice(1)).classList.toggle('hidden', t !== tab);
+    const b = document.getElementById('mTab' + t[0].toUpperCase() + t.slice(1));
+    b.className = t === tab ? 'py-2 px-3 font-bold border-b-2 border-indigo-500 text-indigo-400' : 'py-2 px-3 font-bold border-b-2 border-transparent text-slate-400 hover:text-white';
+  });
+}
+
+function saveSyncSettings() {
+  localStorage.setItem('f1_json_url', document.getElementById('jsonUrlInput').value.trim());
+  localStorage.setItem('f1_json_autosync', document.getElementById('autoSyncCheckbox').checked ? 'true' : 'false');
+}
+
+function mergeUpdatedItems(newC, newD, label) {
+  newC.forEach(nc => {
+    const f = findMatchingItem(db.constructors, nc.name);
+    if (f) { f.price = nc.price; f.points = nc.points; }
+    else db.constructors.push({ id: 'c_' + Date.now() + Math.random().toString(36).slice(2, 5), name: nc.name, price: nc.price, points: nc.points });
+  });
+  newD.forEach(nd => {
+    const f = findMatchingItem(db.drivers, nd.name);
+    if (f) { f.price = nd.price; f.points = nd.points; }
+    else db.drivers.push({ id: 'd_' + Date.now() + Math.random().toString(36).slice(2, 5), name: nd.name, price: nd.price, points: nd.points });
+  });
+  saveDb(label);
+  updateUI();
+}
+
+function normalizeJsonPayload(payload) {
+  const cList = [], dList = [];
+  const push = (raw, forced) => {
+    const name = (raw.name || raw.driver || raw.constructor || '').trim();
+    const price = parseFloat(raw.current_cost ?? raw.price ?? raw.cost);
+    const points = parseFloat(raw.points_per_million ?? raw.points ?? raw.ppm);
+    if (!name || isNaN(price) || isNaN(points)) return;
+    if (forced === 'constructor' || (!forced && findMatchingItem(db.constructors, name))) cList.push({ name, price, points });
+    else dList.push({ name, price, points });
+  };
+  if (Array.isArray(payload)) payload.forEach(x => push(x));
+  else if (payload && typeof payload === 'object') {
+    (payload.constructors || []).forEach(x => push(x, 'constructor'));
+    (payload.drivers || []).forEach(x => push(x, 'driver'));
+  }
+  return { cList, dList };
+}
+
+async function fetchRemoteJson(showMsg = true) {
+  const url = (document.getElementById('jsonUrlInput')?.value.trim()) || localStorage.getItem('f1_json_url');
+  const st = document.getElementById('jsonStatusMsg');
+  if (!url) { if (showMsg && st) st.textContent = '請先輸入 JSON 網址'; return; }
+  saveSyncSettings();
+  if (showMsg && st) st.textContent = '同步中...';
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const { cList, dList } = normalizeJsonPayload(data);
+    if (!cList.length && !dList.length) throw new Error('無有效資料');
+    mergeUpdatedItems(cList, dList, '已同步 JSON');
+    if (showMsg && st) st.textContent = `同步完成：${cList.length} 車隊、${dList.length} 車手`;
+  } catch (e) {
+    if (showMsg && st) st.textContent = `同步失敗：${e.message}`;
+  }
+}
+
+function handleLocalJsonFile(ev) {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const { cList, dList } = normalizeJsonPayload(JSON.parse(e.target.result));
+      mergeUpdatedItems(cList, dList, '本機匯入');
+      document.getElementById('jsonStatusMsg').textContent = `已匯入 ${cList.length} 車隊、${dList.length} 車手`;
+    } catch (err) {
+      document.getElementById('jsonStatusMsg').textContent = `格式錯誤：${err.message}`;
+    }
+  };
+  r.readAsText(f);
+}
+
+function parseOfficialTextBlock(raw) {
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const out = [];
+  let curName = null, curCost = null;
+  for (const t of lines) {
+    const mCost = t.match(/^\$?(\d+(?:\.\d+)?)M$/i);
+    if (mCost) { curCost = parseFloat(mCost[1]); continue; }
+    const mNum = t.match(/^(-?\d+(?:\.\d+)?)$/);
+    if (mNum && curName && curCost !== null) {
+      out.push({ name: curName, price: curCost, points: parseFloat(mNum[1]) });
+      curName = null; curCost = null; continue;
+    }
+    if (!/^\$?\d/.test(t) && !/^-?\d/.test(t) && t.length > 1) { curName = t; curCost = null; }
+  }
+  return out;
+}
+
+function previewParsedPaste() {
+  pendingParsedData = {
+    constructors: parseOfficialTextBlock(document.getElementById('pasteConstructorBox').value),
+    drivers: parseOfficialTextBlock(document.getElementById('pasteDriverBox').value)
+  };
+  const area = document.getElementById('pastePreviewArea');
+  area.classList.remove('hidden');
+  area.innerHTML = `辨識 ${pendingParsedData.constructors.length} 車隊、${pendingParsedData.drivers.length} 車手`;
+  document.getElementById('applyPasteBtn').disabled = !(pendingParsedData.constructors.length || pendingParsedData.drivers.length);
+}
+
+function applyParsedPaste() {
+  if (!pendingParsedData) return;
+  mergeUpdatedItems(pendingParsedData.constructors, pendingParsedData.drivers, '貼上更新');
+  closeDataModal();
+}
+
+function renderManualTable() {
+  const sec = (title, arr, prefix) => `
+    <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 space-y-1">
+      <div class="font-bold text-indigo-300 mb-1">${title}</div>
+      ${arr.map((it, i) => `
+        <div class="grid grid-cols-12 gap-1 items-center">
+          <span class="col-span-6 truncate">${it.name}</span>
+          <input data-t="${prefix}" data-i="${i}" data-f="price" type="number" step="0.1" value="${it.price}" class="col-span-3 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-right text-sky-400" />
+          <input data-t="${prefix}" data-i="${i}" data-f="points" type="number" step="0.01" value="${it.points}" class="col-span-3 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-right text-amber-400" />
+        </div>`).join('')}
+    </div>`;
+  document.getElementById('manualEditGrid').innerHTML = sec('車隊', db.constructors, 'constructors') + sec('車手', db.drivers, 'drivers');
+}
+
+function saveManualTable() {
+  document.querySelectorAll('#manualEditGrid input').forEach(inp => {
+    const v = parseFloat(inp.value);
+    if (!isNaN(v)) db[inp.dataset.t][parseInt(inp.dataset.i, 10)][inp.dataset.f] = v;
+  });
+  saveDb('手動儲存');
+  updateUI();
+  closeDataModal();
+}
+
+function resetToDefaultData() {
+  db = JSON.parse(JSON.stringify(DEFAULT_DATA));
+  saveDb('已恢復預設');
+  renderManualTable();
+  updateUI();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  loadPresetRoster();
+  if (localStorage.getItem('f1_json_autosync') === 'true' && localStorage.getItem('f1_json_url')) {
+    fetchRemoteJson(false);
+  }
+});
+</script>
+</body>
+</html>
