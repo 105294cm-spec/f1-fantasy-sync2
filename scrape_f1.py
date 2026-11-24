@@ -6,23 +6,20 @@ CONSTRUCTOR_URL = "https://fantasy.formula1.com/en/statistics/details?tab=constr
 
 EXTRACT_JS = """
 () => {
-  // 抓出所有可能是一筆資料列的區塊（tr 或帶有 row/card/item/stat 的 div/li）
   const candidates = Array.from(
     document.querySelectorAll('table tbody tr, [role="row"], [class*="row"], [class*="Row"], [class*="item"], [class*="Item"], li')
   );
 
   const items = [];
   for (const el of candidates) {
-    // 過濾太大的外層容器，避免整張大表被當成一筆
     const txt = (el.innerText || '').trim();
-    if (!txt || txt.length > 400) continue;
-    if (!txt.includes('$')) continue;
+    if (!txt || txt.length > 400 || !txt.includes('$')) continue;
 
     const tokens = txt.split('\\n').map(s => s.trim()).filter(Boolean);
     const costToken = tokens.find(t => /^\\$?\\d+(\\.\\d+)?\\s*M?$/i.test(t) && t.includes('$'));
     const numTokens = tokens.filter(t => /^-?\\d+(\\.\\d+)?$/.test(t));
 
-    const ignoreWords = /^(game stats|driver|constructor|team|current cost|points per million|value for money|rank|pts|ppm|budget|price)$/i;
+    const ignoreWords = /^(game stats|driver|constructor|team|current cost|points per million|value for money|total fantasy points scored|rank|pts|ppm|budget|price)$/i;
     const name = tokens.find(t =>
       !t.includes('$') &&
       !/^-?\\d+(\\.\\d+)?$/.test(t) &&
@@ -50,35 +47,56 @@ EXTRACT_JS = """
 }
 """
 
-def scrape_tab(page, label, url):
-    page.goto(url, wait_until="domcontentloaded", timeout=60000)
-    page.wait_for_timeout(5000)
+def switch_to_value_for_money(page, label):
+    # 1. 若有 Cookie 同意彈窗先嘗試關閉，避免遮擋點擊
+    for btn_text in ["Accept All", "Accept", "Agree", "Reject All"]:
+        try:
+            btn = page.get_by_role("button", name=btn_text, exact=False)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                page.wait_for_timeout(800)
+                break
+        except Exception:
+            pass
 
-    # 嘗試點擊 Value for Money 篩選
+    # 2. 情況 A：Value for Money 是下拉選單選項，需先點開目前的 "Total Fantasy Points Scored"
     try:
-        vfm = page.get_by_text("Value for Money", exact=False)
-        if vfm.count() > 0:
-            vfm.first.click()
-            page.wait_for_timeout(2000)
+        dropdown = page.get_by_text("Total Fantasy Points Scored", exact=False)
+        if dropdown.count() > 0:
+            dropdown.first.click()
+            page.wait_for_timeout(1000)
     except Exception:
         pass
 
-    # 在 log 印出包含 $ 的文字片段，方便判斷實際排版格式
-    sample_lines = page.evaluate("""
-      () => document.body.innerText
-        .split('\\n')
-        .map(s => s.trim())
-        .filter(s => s.includes('$'))
-        .slice(0, 25)
-    """)
-    print(f"[{label}] Sample '$' lines:", sample_lines)
+    # 3. 點擊 "Value for Money"（包含隱藏在展開選單或滾動區內的選項）
+    clicked = False
+    try:
+        vfm = page.get_by_text("Value for Money", exact=False)
+        if vfm.count() > 0:
+            vfm.first.scroll_into_view_if_needed()
+            vfm.first.click(force=True)
+            clicked = True
+            page.wait_for_timeout(2500)
+    except Exception as e:
+        print(f"[{label}] Click Value for Money error:", e)
 
-    return page.evaluate(EXTRACT_JS)
+    # 4. 驗證目前頁面是否已出現 "Points Per Million" 欄位標題
+    has_ppm = page.evaluate("() => document.body.innerText.includes('Points Per Million')")
+    print(f"[{label}] Clicked VFM={clicked}, Page has 'Points Per Million'={has_ppm}")
+
+def scrape_tab(page, label, url):
+    page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(4500)
+    switch_to_value_for_money(page, label)
+    data = page.evaluate(EXTRACT_JS)
+    print(f"[{label}] Sample extracted:", data[:3])
+    return data
 
 def main():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
+            viewport={"width": 1440, "height": 900},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
         page = context.new_page()
