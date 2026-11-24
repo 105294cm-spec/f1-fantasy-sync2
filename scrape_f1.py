@@ -19,7 +19,7 @@ EXTRACT_JS = """
     const costToken = tokens.find(t => /^\\$?\\d+(\\.\\d+)?\\s*M?$/i.test(t) && t.includes('$'));
     const numTokens = tokens.filter(t => /^-?\\d+(\\.\\d+)?$/.test(t));
 
-    const ignoreWords = /^(game stats|driver|constructor|team|current cost|points per million|value for money|total fantasy points scored|rank|pts|ppm|budget|price)$/i;
+    const ignoreWords = /^(game stats|driver|constructor|team|current cost|points per million|value for money|total fantasy points scored|average fantasy points scored|rank|pts|ppm|budget|price)$/i;
     const name = tokens.find(t =>
       !t.includes('$') &&
       !/^-?\\d+(\\.\\d+)?$/.test(t) &&
@@ -47,41 +47,72 @@ EXTRACT_JS = """
 }
 """
 
-def debug_and_switch(page, label):
-    # 印出頁面上所有 <select> 選項與包含 Value / Points / Filter 的文字
-    debug_info = page.evaluate("""
-      () => {
-        const selects = Array.from(document.querySelectorAll('select')).map(s => ({
-          id: s.id,
-          name: s.name,
-          options: Array.from(s.options).map(o => ({ value: o.value, text: o.text.trim() }))
-        }));
-        const matchedTexts = Array.from(document.querySelectorAll('button, a, [role="option"], [role="tab"], label, div, span'))
-          .map(el => (el.innerText || '').trim())
-          .filter(t => t.length > 0 && t.length < 60 && /value|points|money|filter|ppm/i.test(t));
-        return { selects, matchedTexts: [...new Set(matchedTexts)].slice(0, 30) };
-      }
-    """)
-    print(f"[{label}][DEBUG] selects:", debug_info["selects"])
-    print(f"[{label}][DEBUG] matchedTexts:", debug_info["matchedTexts"])
+def switch_to_vfm(page, label):
+    # 1. 若有 Cookie 彈窗先關閉
+    for btn_text in ["Accept All", "Accept", "Agree", "Reject All"]:
+        try:
+            btn = page.get_by_role("button", name=btn_text, exact=False)
+            if btn.count() > 0 and btn.first.is_visible():
+                btn.first.click()
+                page.wait_for_timeout(800)
+                break
+        except Exception:
+            pass
 
-    # 若有 <select> 選項包含 value / money / ppm，直接用 select_option 切換
-    for s in debug_info["selects"]:
-        for opt in s["options"]:
-            if "value" in opt["text"].lower() or "money" in opt["text"].lower() or "ppm" in opt["value"].lower():
-                try:
-                    selector = f"#{s['id']}" if s["id"] else "select"
-                    page.select_option(selector, value=opt["value"])
-                    page.wait_for_timeout(2000)
-                    print(f"[{label}][DEBUG] Selected option:", opt)
-                    return
-                except Exception as e:
-                    print(f"[{label}][DEBUG] select_option error:", e)
+    # 2. 先點一下目前預設顯示的 "Total Fantasy Points Scored"（若它是折疊選單就會展開）
+    try:
+        triggers = page.get_by_text("Total Fantasy Points Scored", exact=True)
+        for i in range(triggers.count()):
+            if triggers.nth(i).is_visible():
+                triggers.nth(i).click(force=True)
+                page.wait_for_timeout(1000)
+                break
+    except Exception:
+        pass
+
+    # 3. 遍歷所有 "Value For Money" 節點，點擊真正可見的那一個
+    clicked = False
+    vfm_nodes = page.get_by_text("Value For Money", exact=True)
+    count = vfm_nodes.count()
+    print(f"[{label}] Found {count} 'Value For Money' nodes")
+
+    for i in range(count):
+        node = vfm_nodes.nth(i)
+        try:
+            if node.is_visible():
+                node.scroll_into_view_if_needed()
+                node.click(force=True)
+                clicked = True
+                print(f"[{label}] Clicked visible node index {i}")
+                page.wait_for_timeout(2500)
+                break
+        except Exception as e:
+            print(f"[{label}] Node {i} click failed:", e)
+
+    # 若剛剛仍未點到可見節點，直接用 JS 觸發最內層包含 Value For Money 的元素點擊
+    if not clicked:
+        js_clicked = page.evaluate("""
+          () => {
+            const els = Array.from(document.querySelectorAll('*'))
+              .filter(el => el.children.length === 0 && (el.innerText || '').trim().toLowerCase() === 'value for money');
+            for (const el of els) {
+              el.click();
+              if (el.parentElement) el.parentElement.click();
+            }
+            return els.length;
+          }
+        """)
+        print(f"[{label}] Fallback JS clicked {js_clicked} leaf nodes")
+        page.wait_for_timeout(2500)
+
+    # 4. 確認欄位是否已切換為 Points Per Million
+    has_ppm = page.evaluate("() => /points per million/i.test(document.body.innerText)")
+    print(f"[{label}] Page now shows 'Points Per Million': {has_ppm}")
 
 def scrape_tab(page, label, url):
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_timeout(5000)
-    debug_and_switch(page, label)
+    switch_to_vfm(page, label)
     data = page.evaluate(EXTRACT_JS)
     print(f"[{label}] Sample extracted:", data[:3])
     return data
