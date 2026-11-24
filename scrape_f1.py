@@ -6,64 +6,72 @@ CONSTRUCTOR_URL = "https://fantasy.formula1.com/en/statistics/details?tab=constr
 
 EXTRACT_JS = """
 () => {
-  // 優先抓真正的表格列 tr
-  const rows = Array.from(document.querySelectorAll('table tbody tr'));
+  // 抓出所有可能是一筆資料列的區塊（tr 或帶有 row/card/item/stat 的 div/li）
+  const candidates = Array.from(
+    document.querySelectorAll('table tbody tr, [role="row"], [class*="row"], [class*="Row"], [class*="item"], [class*="Item"], li')
+  );
+
   const items = [];
+  for (const el of candidates) {
+    // 過濾太大的外層容器，避免整張大表被當成一筆
+    const txt = (el.innerText || '').trim();
+    if (!txt || txt.length > 400) continue;
+    if (!txt.includes('$')) continue;
 
-  for (const row of rows) {
-    const tokens = row.innerText
-      .split('\\n')
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    // 車手/車隊價格通常長這樣: $27.7M 或 27.7M
-    const costStr = tokens.find(t => /^\\$?\\d+(\\.\\d+)?M$/i.test(t));
-    if (!costStr) continue;
-
-    // 找出所有數字 token
+    const tokens = txt.split('\\n').map(s => s.trim()).filter(Boolean);
+    const costToken = tokens.find(t => /^\\$?\\d+(\\.\\d+)?\\s*M?$/i.test(t) && t.includes('$'));
     const numTokens = tokens.filter(t => /^-?\\d+(\\.\\d+)?$/.test(t));
-    if (numTokens.length === 0) continue;
 
-    // 找出候選名稱（排除純數字、價格、常見介面字眼）
-    const ignoreWords = /^(game stats|driver|constructor|team|current cost|points per million|value for money|rank|pts|ppm)$/i;
+    const ignoreWords = /^(game stats|driver|constructor|team|current cost|points per million|value for money|rank|pts|ppm|budget|price)$/i;
     const name = tokens.find(t =>
-      !/^\\$?\\d/.test(t) &&
-      !/^-?\\d/.test(t) &&
+      !t.includes('$') &&
+      !/^-?\\d+(\\.\\d+)?$/.test(t) &&
       !ignoreWords.test(t) &&
-      t.length >= 2
+      t.length >= 2 &&
+      t.length <= 40
     );
 
-    if (name) {
+    if (name && costToken && numTokens.length > 0) {
       items.push({
         name,
-        current_cost: parseFloat(costStr.replace(/[$,a-zA-Z]/g, '')),
+        current_cost: parseFloat(costToken.replace(/[^0-9.]/g, '')),
         points_per_million: parseFloat(numTokens[numTokens.length - 1])
       });
     }
   }
 
   const dedup = {};
-  for (const it of items) dedup[it.name] = it;
+  for (const it of items) {
+    if (!isNaN(it.current_cost) && !isNaN(it.points_per_million)) {
+      dedup[it.name] = it;
+    }
+  }
   return Object.values(dedup);
 }
 """
 
-def scrape_tab(page, url):
+def scrape_tab(page, label, url):
     page.goto(url, wait_until="domcontentloaded", timeout=60000)
-    # 等待表格列出現（最多等 20 秒）
-    try:
-        page.wait_for_selector("table tbody tr", timeout=20000)
-    except Exception:
-        pass
-    page.wait_for_timeout(2000)
+    page.wait_for_timeout(5000)
 
+    # 嘗試點擊 Value for Money 篩選
     try:
         vfm = page.get_by_text("Value for Money", exact=False)
         if vfm.count() > 0:
             vfm.first.click()
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(2000)
     except Exception:
         pass
+
+    # 在 log 印出包含 $ 的文字片段，方便判斷實際排版格式
+    sample_lines = page.evaluate("""
+      () => document.body.innerText
+        .split('\\n')
+        .map(s => s.trim())
+        .filter(s => s.includes('$'))
+        .slice(0, 25)
+    """)
+    print(f"[{label}] Sample '$' lines:", sample_lines)
 
     return page.evaluate(EXTRACT_JS)
 
@@ -75,8 +83,8 @@ def main():
         )
         page = context.new_page()
 
-        drivers = scrape_tab(page, DRIVER_URL)
-        constructors = scrape_tab(page, CONSTRUCTOR_URL)
+        drivers = scrape_tab(page, "DRIVERS", DRIVER_URL)
+        constructors = scrape_tab(page, "CONSTRUCTORS", CONSTRUCTOR_URL)
         browser.close()
 
     output = {
