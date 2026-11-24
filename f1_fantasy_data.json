@@ -3,184 +3,184 @@
     {
       "name": "Mercedes",
       "current_cost": 34,
-      "points_per_million": 1632
+      "points_per_million": 2.29
     },
     {
       "name": "Ferrari",
       "current_cost": 29.4,
-      "points_per_million": 1365
+      "points_per_million": 2.21
     },
     {
       "name": "Red Bull Racing",
       "current_cost": 33.9,
-      "points_per_million": 1176
-    },
-    {
-      "name": "McLaren",
-      "current_cost": 33.6,
-      "points_per_million": 1102
+      "points_per_million": 1.65
     },
     {
       "name": "Racing Bulls",
       "current_cost": 18.9,
-      "points_per_million": 645
+      "points_per_million": 1.63
     },
     {
-      "name": "Alpine",
-      "current_cost": 18.2,
-      "points_per_million": 457
+      "name": "McLaren",
+      "current_cost": 33.6,
+      "points_per_million": 1.56
     },
     {
       "name": "Audi",
       "current_cost": 12.8,
-      "points_per_million": 355
+      "points_per_million": 1.32
     },
     {
       "name": "Haas F1 Team",
       "current_cost": 12,
-      "points_per_million": 321
+      "points_per_million": 1.27
+    },
+    {
+      "name": "Alpine",
+      "current_cost": 18.2,
+      "points_per_million": 1.2
     },
     {
       "name": "Williams",
       "current_cost": 13.8,
-      "points_per_million": 247
+      "points_per_million": 0.85
     },
     {
       "name": "Aston Martin",
       "current_cost": 3.3,
-      "points_per_million": -76
+      "points_per_million": -1.1
     },
     {
       "name": "Cadillac",
       "current_cost": 3,
-      "points_per_million": -116
+      "points_per_million": -1.84
     }
   ],
   "drivers": [
     {
       "name": "Kimi",
       "current_cost": 27.7,
-      "points_per_million": 813
+      "points_per_million": 1.4
     },
     {
       "name": "Max",
       "current_cost": 29.4,
-      "points_per_million": 687
+      "points_per_million": 1.11
     },
     {
       "name": "Lewis",
       "current_cost": 25.4,
-      "points_per_million": 580
+      "points_per_million": 1.09
     },
     {
       "name": "Charles",
       "current_cost": 24.9,
-      "points_per_million": 539
-    },
-    {
-      "name": "George",
-      "current_cost": 27.1,
-      "points_per_million": 501
-    },
-    {
-      "name": "Lando",
-      "current_cost": 26.3,
-      "points_per_million": 480
-    },
-    {
-      "name": "Oscar",
-      "current_cost": 22.8,
-      "points_per_million": 359
-    },
-    {
-      "name": "Isack",
-      "current_cost": 16.7,
-      "points_per_million": 267
-    },
-    {
-      "name": "Liam",
-      "current_cost": 15.1,
-      "points_per_million": 53
+      "points_per_million": 1.03
     },
     {
       "name": "Pierre",
       "current_cost": 9,
-      "points_per_million": 172
-    },
-    {
-      "name": "Esteban",
-      "current_cost": 10.1,
-      "points_per_million": 168
-    },
-    {
-      "name": "Carlos",
-      "current_cost": 8.4,
-      "points_per_million": 152
-    },
-    {
-      "name": "Arvid",
-      "current_cost": 8.8,
-      "points_per_million": 140
-    },
-    {
-      "name": "Franco",
-      "current_cost": 7.6,
-      "points_per_million": 136
-    },
-    {
-      "name": "Gabriel",
-      "current_cost": 7,
-      "points_per_million": 117
+      "points_per_million": 0.91
     },
     {
       "name": "Oliver",
       "current_cost": 4.4,
-      "points_per_million": 83
+      "points_per_million": 0.9
+    },
+    {
+      "name": "George",
+      "current_cost": 27.1,
+      "points_per_million": 0.88
+    },
+    {
+      "name": "Lando",
+      "current_cost": 26.3,
+      "points_per_million": 0.87
+    },
+    {
+      "name": "Carlos",
+      "current_cost": 8.4,
+      "points_per_million": 0.86
+    },
+    {
+      "name": "Liam",
+      "current_cost": 15.1,
+      "points_per_million": 0.17
+    },
+    {
+      "name": "Franco",
+      "current_cost": 7.6,
+      "points_per_million": 0.85
+    },
+    {
+      "name": "Gabriel",
+      "current_cost": 7,
+      "points_per_million": 0.8
+    },
+    {
+      "name": "Esteban",
+      "current_cost": 10.1,
+      "points_per_million": 0.79
+    },
+    {
+      "name": "Arvid",
+      "current_cost": 8.8,
+      "points_per_million": 0.76
+    },
+    {
+      "name": "Isack",
+      "current_cost": 16.7,
+      "points_per_million": 0.76
+    },
+    {
+      "name": "Oscar",
+      "current_cost": 22.8,
+      "points_per_million": 0.75
     },
     {
       "name": "Nico",
       "current_cost": 7,
-      "points_per_million": 64
+      "points_per_million": 0.44
     },
     {
       "name": "Fernando",
       "current_cost": 4.2,
-      "points_per_million": 36
+      "points_per_million": 0.41
     },
     {
       "name": "Sergio",
       "current_cost": 3,
-      "points_per_million": 25
-    },
-    {
-      "name": "Yuki",
-      "current_cost": 9.7,
-      "points_per_million": 23
+      "points_per_million": 0.4
     },
     {
       "name": "Ryo",
       "current_cost": 6.6,
-      "points_per_million": 16
+      "points_per_million": 0.12
+    },
+    {
+      "name": "Yuki",
+      "current_cost": 9.7,
+      "points_per_million": 0.11
     },
     {
       "name": "Rafael",
       "current_cost": 4.8,
-      "points_per_million": -3
+      "points_per_million": -0.03
     },
     {
       "name": "Alexander",
       "current_cost": 3.8,
-      "points_per_million": -11
+      "points_per_million": -0.14
     },
     {
       "name": "Valtteri",
       "current_cost": 3,
-      "points_per_million": -136
+      "points_per_million": -2.16
     },
     {
       "name": "Lance",
       "current_cost": 3,
-      "points_per_million": -162
+      "points_per_million": -2.57
     }
   ]
 }
