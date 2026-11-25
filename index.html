@@ -1,10 +1,9 @@
-HTML
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>F1 Fantasy 排陣器</title>
+  <title>F1 Fantasy 模擬器</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #0f172a; color: #f8fafc; }
@@ -20,7 +19,7 @@ HTML
     <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2.5">
         <span class="bg-red-600 text-white font-black px-2 py-0.5 rounded text-xs">F1 FANTASY</span>
-        <span class="font-bold text-sm md:text-base">排陣器</span>
+        <span class="font-bold text-sm md:text-base">模擬器</span>
         <span id="lastSyncBadge" class="hidden text-[11px] bg-slate-800 text-emerald-400 px-2 py-0.5 rounded"></span>
       </div>
 
@@ -101,12 +100,22 @@ HTML
       </div>
     </section>
 
-    <!-- 右側視窗：選手與車隊列表（依價格降冪） -->
+    <!-- 右側視窗：選手與車隊列表（支援依價格或分數由高至低排列） -->
     <section class="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col">
-      <div class="flex items-center justify-between gap-2 mb-3">
-        <h2 class="text-sm font-bold text-white">選手與車隊列表（價格高 → 低）</h2>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-bold text-white">選手與車隊列表</h2>
+          <div class="inline-flex bg-slate-950 border border-slate-700 rounded-lg p-0.5 text-[11px]">
+            <button id="sortPriceBtn" onclick="setPoolSort('price')" class="px-2.5 py-1 rounded-md font-bold bg-indigo-600 text-white transition">
+              價格高 → 低
+            </button>
+            <button id="sortPointsBtn" onclick="setPoolSort('points')" class="px-2.5 py-1 rounded-md font-bold text-slate-400 hover:text-white transition">
+              分數高 → 低
+            </button>
+          </div>
+        </div>
         <input id="searchInput" type="text" oninput="renderPool()" placeholder="搜尋名稱..."
-          class="w-44 sm:w-56 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500" />
+          class="w-40 sm:w-48 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500" />
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1">
@@ -271,7 +280,22 @@ let db = loadCleanDb();
 let selectedConstructors = [];
 let selectedDrivers = [];
 let lockedIds = new Set();
+let poolSortMode = 'price';
 let pendingParsedData = null;
+
+function setPoolSort(mode) {
+  poolSortMode = mode;
+  const priceBtn = document.getElementById('sortPriceBtn');
+  const pointsBtn = document.getElementById('sortPointsBtn');
+  if (mode === 'price') {
+    priceBtn.className = 'px-2.5 py-1 rounded-md font-bold bg-indigo-600 text-white transition';
+    pointsBtn.className = 'px-2.5 py-1 rounded-md font-bold text-slate-400 hover:text-white transition';
+  } else {
+    pointsBtn.className = 'px-2.5 py-1 rounded-md font-bold bg-indigo-600 text-white transition';
+    priceBtn.className = 'px-2.5 py-1 rounded-md font-bold text-slate-400 hover:text-white transition';
+  }
+  renderPool();
+}
 
 function saveDb(label = '已儲存') {
   localStorage.setItem('f1_fantasy_db_v3', JSON.stringify(db));
@@ -404,7 +428,7 @@ function renderList(containerId, items, type, slotsFull, remaining) {
       <div class="flex items-center justify-between bg-slate-900 border ${isSel ? 'border-emerald-500/60 bg-emerald-950/20' : overBudget ? 'border-slate-800/60 opacity-55' : 'border-slate-800/90'} rounded-lg px-2.5 py-1.5 text-xs">
         <div class="min-w-0 pr-2">
           <div class="font-semibold text-white truncate">${item.name}</div>
-          <div class="text-[11px] text-slate-400"><span class="text-sky-400 font-bold">$${item.price.toFixed(1)}M</span> · <span class="text-amber-400">${item.points.toFixed(2)} 分</span></div>
+          <div class="text-[11px] text-slate-400"><span class="text-sky-400 font-bold">$${item.price.toFixed(1)}M</span> · <span class="text-amber-400 font-semibold">${item.points.toFixed(2)} 分</span></div>
         </div>
         <button onclick="toggleSelect('${type}', '${item.id}')" ${disabled ? 'disabled' : ''}
           class="px-2 py-0.5 rounded text-[11px] font-bold shrink-0 ${
@@ -414,12 +438,18 @@ function renderList(containerId, items, type, slotsFull, remaining) {
   }).join('');
 }
 
+function compareDesc(a, b) {
+  if (poolSortMode === 'points') {
+    return (b.points - a.points) || (b.price - a.price);
+  }
+  return (b.price - a.price) || (b.points - a.points);
+}
+
 function renderPool() {
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
   const remaining = getBudget() - getCurrentCost();
-  const byPriceDesc = (a, b) => (b.price - a.price) || (b.points - a.points);
-  const cs = db.constructors.filter(x => !q || x.name.toLowerCase().includes(q)).sort(byPriceDesc);
-  const ds = db.drivers.filter(x => !q || x.name.toLowerCase().includes(q)).sort(byPriceDesc);
+  const cs = db.constructors.filter(x => !q || x.name.toLowerCase().includes(q)).sort(compareDesc);
+  const ds = db.drivers.filter(x => !q || x.name.toLowerCase().includes(q)).sort(compareDesc);
 
   document.getElementById('constructorCountBadge').textContent = `${cs.length}`;
   document.getElementById('driverCountBadge').textContent = `${ds.length}`;
